@@ -16,6 +16,10 @@
 
 package org.kie.workbench.common.screens.projecteditor.client.editor;
 
+import static org.uberfire.client.common.ConcurrentChangePopup.newConcurrentDelete;
+import static org.uberfire.client.common.ConcurrentChangePopup.newConcurrentRename;
+import static org.uberfire.client.common.ConcurrentChangePopup.newConcurrentUpdate;
+
 import javax.enterprise.event.Event;
 import javax.enterprise.event.Observes;
 import javax.inject.Inject;
@@ -40,6 +44,8 @@ import org.kie.workbench.common.screens.projecteditor.client.resources.ProjectEd
 import org.kie.workbench.common.screens.projecteditor.client.validation.ProjectNameValidator;
 import org.kie.workbench.common.screens.projecteditor.model.ProjectScreenModel;
 import org.kie.workbench.common.screens.projecteditor.service.ProjectScreenService;
+import org.kie.workbench.common.widgets.client.callbacks.HasBusyIndicatorDefaultErrorCallback;
+import org.kie.workbench.common.services.security.KieWorkbenchACL;
 import org.kie.workbench.common.widgets.client.menu.FileMenuBuilder;
 import org.kie.workbench.common.widgets.client.popups.file.CommandWithCommitMessage;
 import org.kie.workbench.common.widgets.client.popups.file.CommandWithFileNameAndCommitMessage;
@@ -63,8 +69,12 @@ import org.uberfire.mvp.PlaceRequest;
 import org.uberfire.workbench.events.NotificationEvent;
 import org.uberfire.workbench.model.menu.MenuFactory;
 import org.uberfire.workbench.model.menu.Menus;
-
 import static org.kie.uberfire.client.common.ConcurrentChangePopup.*;
+import static org.kie.workbench.common.screens.projecteditor.security.ProjectEditorFeatures.F_PROJECT_AUTHORING_BUILDANDDEPLOY;
+import static org.kie.workbench.common.screens.projecteditor.security.ProjectEditorFeatures.F_PROJECT_AUTHORING_COPY;
+import static org.kie.workbench.common.screens.projecteditor.security.ProjectEditorFeatures.F_PROJECT_AUTHORING_DELETE;
+import static org.kie.workbench.common.screens.projecteditor.security.ProjectEditorFeatures.F_PROJECT_AUTHORING_RENAME;
+import static org.kie.workbench.common.screens.projecteditor.security.ProjectEditorFeatures.F_PROJECT_AUTHORING_SAVE;
 
 @WorkbenchScreen(identifier = "projectScreen")
 public class ProjectScreenPresenter
@@ -94,7 +104,9 @@ public class ProjectScreenPresenter
     private BusyIndicatorView busyIndicatorView;
 
     private ObservablePath.OnConcurrentUpdateEvent concurrentUpdateSessionInfo = null;
-
+    
+    private KieWorkbenchACL kieACL;
+    
     public ProjectScreenPresenter() {
     }
 
@@ -108,7 +120,8 @@ public class ProjectScreenPresenter
                                    final Event<ChangeTitleWidgetEvent> changeTitleWidgetEvent,
                                    final ProjectNameValidator projectNameValidator,
                                    final PlaceManager placeManager,
-                                   final BusyIndicatorView busyIndicatorView ) {
+                                   final BusyIndicatorView busyIndicatorView,
+                                   final KieWorkbenchACL kieACL) {
         this.view = view;
         view.setPresenter( this );
 
@@ -121,7 +134,7 @@ public class ProjectScreenPresenter
         this.placeManager = placeManager;
 
         this.busyIndicatorView = busyIndicatorView;
-
+        this.kieACL=kieACL;
         showCurrentProjectInfoIfAny( workbenchContext.getActiveProject() );
 
         makeMenuBar();
@@ -256,21 +269,27 @@ public class ProjectScreenPresenter
 
     private void makeMenuBar() {
         menus = MenuFactory
-                .newTopLevelMenu( CommonConstants.INSTANCE.Save() )
-                .respondsWith( getSaveCommand() )
+                .newTopLevelMenu(CommonConstants.INSTANCE.Save())
+                .withRoles(kieACL.getGrantedRoles(F_PROJECT_AUTHORING_SAVE))
+                .respondsWith(getSaveCommand())
                 .endMenu()
-                .newTopLevelMenu( CommonConstants.INSTANCE.Delete() )
-                .respondsWith( getDeleteCommand() )
+                .newTopLevelMenu(CommonConstants.INSTANCE.Delete())
+                .withRoles(kieACL.getGrantedRoles(F_PROJECT_AUTHORING_DELETE))
+                .respondsWith(getDeleteCommand())
                 .endMenu()
-                .newTopLevelMenu( CommonConstants.INSTANCE.Rename() )
-                .respondsWith( getRenameCommand() )
+                .newTopLevelMenu(CommonConstants.INSTANCE.Rename())
+                .withRoles(kieACL.getGrantedRoles(F_PROJECT_AUTHORING_RENAME))
+                .respondsWith(getRenameCommand())
                 .endMenu()
-                .newTopLevelMenu( CommonConstants.INSTANCE.Copy() )
-                .respondsWith( getCopyCommand() )
+                .newTopLevelMenu(CommonConstants.INSTANCE.Copy())
+                .withRoles(kieACL.getGrantedRoles(F_PROJECT_AUTHORING_COPY))
+                .respondsWith(getCopyCommand())
                 .endMenu()
-                .newTopLevelMenu( ProjectEditorResources.CONSTANTS.BuildAndDeploy() )
-                .respondsWith( getBuildCommand() )
-                .endMenu().build();
+                .newTopLevelMenu(
+                        ProjectEditorResources.CONSTANTS.BuildAndDeploy())
+                .withRoles(
+                        kieACL.getGrantedRoles(F_PROJECT_AUTHORING_BUILDANDDEPLOY))
+                .respondsWith(getBuildCommand()).endMenu().build();
     }
 
     private Command getDeleteCommand() {
@@ -458,7 +477,7 @@ public class ProjectScreenPresenter
             newConcurrentUpdate( concurrentUpdateSessionInfo.getPath(),
                                  concurrentUpdateSessionInfo.getIdentity(),
                                  new Command() {
-                                     @Override
+                                     @Overridekie-wb-common-screens/kie-wb-common-project-editor/kie-wb-common-project-editor-client/src/main/java/org/kie/workbench/common/screens/projecteditor/client/editor/ProjectScreenPresenter.java
                                      public void execute() {
                                          save( callback );
                                      }
